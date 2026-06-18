@@ -1,0 +1,56 @@
+name: CI/CD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# stream-processor — Pattern A fallback receiver example.
+#
+# Pattern B (normal path):
+#   Triggered as Stage 2 of the Data Pipeline Stack orchestrator at
+#   deployments/.github/workflows/deploy-data-pipeline-stack.yml
+#
+# Pattern A (fallback):
+#   When data-ingestion is hotfixed independently (e.g. a schema fix to a
+#   Kafka message format), the data-ingestion service fires a
+#   `data-ingestion-deployed` dispatch event after its own deploy job
+#   completes. stream-processor picks this up and re-deploys to consume
+#   the updated message schema — without waiting for a full pipeline stack run.
+#
+#   The dispatch payload includes:
+#     client_payload.environment  — which env was deployed to
+#     client_payload.upstream_sha — ingestion commit that triggered this
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    branches: [main]
+
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+  # Pattern A: triggered when data-ingestion deploys independently
+  repository_dispatch:
+    types:
+      - data-ingestion-deployed # fired by data-ingestion's own ci.yaml
+      - data-pipeline-deploy-complete # fired by the full pipeline orchestration
+
+jobs:
+  pipeline:
+    uses: gha-landing-zone/shared-actions/.github/workflows/reusable-elixir-pipeline.yaml@v1
+    with:
+      service-name: stream-processor
+      elixir-version: "1.16"
+      otp-version: "26"
+      run-credo: true
+      run-dialyzer: false
+      deploy-env: ${{ github.event.client_payload.environment || 'staging' }}
+      skip-deploy: ${{ github.event_name == 'pull_request' }}
+      ecs-cluster: >-
+        ${{
+          (github.event.client_payload.environment == 'production' ||
+           github.ref_type == 'tag')
+          && 'your-cluster-production'
+          || 'your-cluster-staging'
+        }}
+      ecs-container-name: processor
+      ecs-task-definition: .aws/task-definition.json
+    secrets: inherit
