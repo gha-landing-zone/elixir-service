@@ -1,0 +1,18 @@
+# Build artifacts
+/_build/
+/deps/
+/doc/
+/.elixir_ls/
+
+# Mix lock is committed, but ignore local overrides
+# mix.lock  ← keep this tracked
+
+# Test coverage
+/cover/
+
+# Dialyzer
+/priv/plts/
+
+# Env files
+.env
+.env.*
